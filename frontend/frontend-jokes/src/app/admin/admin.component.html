@@ -1,0 +1,46 @@
+<pre *ngIf="auth.userProfile$ | async as profile">
+  <code>Salut, {{ profile.name }}!</code>
+</pre>
+
+<button type="button" class="btn btn-primary m-3" (click)="openDialogAjouterBlague()">Ajouter une blague</button>
+
+<div *ngIf="loading">
+  <div class="cssload-dots">
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+  </div>
+
+  <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="12" ></feGaussianBlur>
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0	0 1 0 0 0	0 0 1 0 0	0 0 0 18 -7" result="goo" ></feColorMatrix>
+        <!--<feBlend in2="goo" in="SourceGraphic" result="mix" ></feBlend>-->
+      </filter>
+    </defs>
+  </svg>
+</div>
+
+<!-- Feed (les blagues)-->
+<div class="row">
+  <div *ngFor="let blague of lesBlaguesUser"   class="p-3 col-sm" >
+    <div class="card" style="width: 18rem;">
+      <img *ngIf="blague.imageUrl" class="card-img-top" src="{{blague.imageUrl}}" alt="Card image cap">
+      <div class="card-body">
+        <p class="card-text">{{blague.blague}}</p>
+        <p class="small text-right">{{blague.createdAt | date}} - {{blague.createdAt | date:'shortTime'}}</p>
+
+        <ngb-rating [(rate)]="blague.rating" [readonly]="true"></ngb-rating>
+
+        <!--<a href="#" class="btn btn-warning">Modifier</a>-->
+        <button type="button" class="btn btn-danger float-right" (click)="deleteBlague(blague.blagueId)">
+          <img src="./assets/img/round_delete_forever_white_18dp.png">
+        </button>
+
+      </div>
+    </div>
+  </div>
+</div>

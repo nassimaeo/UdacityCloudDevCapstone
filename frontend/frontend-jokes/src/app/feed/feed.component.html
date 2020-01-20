@@ -1,0 +1,53 @@
+<div *ngIf="loading">
+  <div class="cssload-dots">
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+    <div class="cssload-dot"></div>
+  </div>
+
+  <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="goo">
+        <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="12" ></feGaussianBlur>
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0	0 1 0 0 0	0 0 1 0 0	0 0 0 18 -7" result="goo" ></feColorMatrix>
+        <!--<feBlend in2="goo" in="SourceGraphic" result="mix" ></feBlend>-->
+      </filter>
+    </defs>
+  </svg>
+</div>
+
+<!-- Feed (les blagues)-->
+<div class="row">
+  <div *ngFor="let blague of lesBlagues"  class="p-3 col-sm">
+    <div class="card" >
+      <img *ngIf="blague.imageUrl" class="card-img-top" src="{{blague.imageUrl}}" alt="Card image cap">
+      <div class="card-body">
+        <h5 class="card-title">{{blague.id}}</h5>
+        <p class="card-text">{{blague.blague}}</p>
+        <p class="small text-right">{{blague.createdAt | date}} - {{blague.createdAt | date:'shortTime'}}</p>
+
+        <ngb-rating [(rate)]="blague.rating" 
+        [readonly]="!isAuthenticated()"
+        (rateChange)="onRateChange(blague, $event)"></ngb-rating>
+        
+
+        <!--
+        <div class="alert alert-secondary" role="alert">
+          <strong>User1</strong>
+          ceci est un commentaire.
+        </div>
+      
+        <form>
+          <div class="form-group">
+            <label for="exampleFormControlTextarea1">Ajouter un commentaire</label>
+            <textarea class="form-control" rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+        -->
+      </div>
+    </div>
+  </div>
+</div>

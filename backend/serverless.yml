@@ -1,0 +1,260 @@
+service:
+  name: serverless-blagues-app
+
+plugins:
+  - serverless-webpack
+  - serverless-iam-roles-per-function
+  
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+
+  apiGateway:
+    minimumCompressionSize: 1024 # Enable gzip compression for responses > 1 KB
+
+  environment:
+    BLAGUES_TABLE: blagues-${self:provider.stage}
+    RATINGS_TABLE: blagues-ratings-${self:provider.stage}
+    IMAGES_S3_BUCKET: blagues-images-simopr-${self:provider.stage}
+    CONNECTIONS_TABLE: connections-websocket-blagues-${self:provider.stage}
+    SIGNED_URL_EXPIRATION: 3000
+    INDEX_RATING_BLAGUE: blagueIdIndex
+    INDEX_BLAGUE: blagueIdGlobalIndex    
+    API_ID: WebsocketsApi
+
+functions:
+
+  Auth:
+    handler: src/lambda/auth/auth0Authorizer.handler
+
+  CreateBlague:
+    handler: src/lambda/http/createBlague.handler
+    events:
+      - http:
+          method: post
+          path: blagues
+          authorizer: Auth          
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:GetObject
+        Resource: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*
+
+  GetBlagues:
+    handler: src/lambda/http/getBlagues.handler
+    events:
+      - http:
+          method: get
+          path: blagues
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Scan
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}
+
+  GetBlaguesUser:
+    handler: src/lambda/http/getBlaguesUser.handler
+    events:
+      - http:
+          method: get
+          path: blagues/{userId}
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}
+
+  GetBlaguesUsers:
+    handler: src/lambda/http/getBlaguesUsers.handler
+    events:
+      - http:
+          method: get
+          path: blagues/user
+          authorizer: Auth                    
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}        
+
+  DeleteBlague:
+    handler: src/lambda/http/deleteBlague.handler
+    events:
+      - http:
+          method: delete
+          path: blagues/user/{blagueId}
+          authorizer: Auth
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}        
+
+  RateBlague:
+    handler: src/lambda/http/rateBlague.handler
+    events:
+      - http:
+          method: patch
+          path: blagues/rate/{blagueId}
+          authorizer: Auth          
+          cors: true
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query          
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem          
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.RATINGS_TABLE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.RATINGS_TABLE}/index/${self:provider.environment.INDEX_RATING_BLAGUE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+        Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.BLAGUES_TABLE}/index/${self:provider.environment.INDEX_BLAGUE}  
+  # Connect:
+  #   handler: src/lambda/websocket/connect.handler
+  #   events:
+  #     - websocket:
+  #         route: $connect
+  #         authorizer:
+  #           name: Auth
+  #           identitySource:
+  #             - 'route.request.header.Authorization'
+  #   iamRoleStatements:
+  #     - Effect: Allow
+  #       Action:
+  #         - dynamodb:Scan
+  #         - dynamodb:Query
+  #         - dynamodb:PutItem
+  #       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
+
+  # Disconnect:
+  #   handler: src/lambda/websocket/disconnect.handler
+  #   events: 
+  #     - websocket:
+  #         route: $disconnect
+  #   iamRoleStatements:
+  #     - Effect: Allow
+  #       Action:
+  #         - dynamodb:Scan
+  #         - dynamodb:Query
+  #         - dynamodb:DeleteItem
+  #       Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CONNECTIONS_TABLE}
+
+resources:
+  Resources:
+    
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+
+    BlaguesDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: blagueId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: blagueId
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.BLAGUES_TABLE}
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.INDEX_BLAGUE}
+            KeySchema:
+              - AttributeName: blagueId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    BlaguesRatingsDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: blagueId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: blagueId
+            KeyType: HASH
+          - AttributeName: userId
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.RATINGS_TABLE}
+        LocalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.INDEX_RATING_BLAGUE}
+            KeySchema:
+              - AttributeName: blagueId
+                KeyType: HASH
+              - AttributeName: userId
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    ImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.IMAGES_S3_BUCKET}
+        CorsConfiguration:
+          CorsRules:
+            -
+              AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+                - HEAD
+              MaxAge: 3000
+
+    BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id: MyPolicy
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicReadForGetBucketObjects
+              Effect: Allow
+              Principal: '*'
+              Action: 
+                - 's3:GetObject'
+                - 's3:PutObject'
+              Resource: 'arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*'
+        Bucket: !Ref ImagesBucket
